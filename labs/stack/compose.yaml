@@ -1,0 +1,52 @@
+name: academy-synthetic-lab
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: academy
+      POSTGRES_DB: academy
+      # Synthetic local-only password. Never use for production.
+      POSTGRES_PASSWORD: academy_local_example_only
+    volumes:
+      - academy_pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U academy -d academy"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+    networks: [private]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+    networks: [private]
+  worker:
+    build: ./worker
+    command: ["celery", "-A", "tasks", "worker", "--loglevel=WARNING", "--pool=solo", "--concurrency=1"]
+    environment: &celery_environment
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [private]
+  client:
+    build: ./worker
+    command: ["python", "submit.py"]
+    environment: *celery_environment
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    networks: [private]
+volumes:
+  academy_pgdata:
+networks:
+  private:
+    internal: true
