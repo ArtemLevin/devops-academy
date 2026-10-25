@@ -76,6 +76,8 @@ def main() -> int:
                         assert not errors, f"JavaScript errors: {errors}"
 
                         if lesson in ("06", "20", "44") and width in (390, 1440):
+                            # Hide sticky navigation only while capturing the isolated diagram.
+                            page.add_style_tag(content=".top{position:static!important}")
                             page.locator("#visual-guide").screenshot(
                                 path=str(RESULTS / f"lesson-{lesson}-{width}.png")
                             )
