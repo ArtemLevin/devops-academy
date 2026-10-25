@@ -1,0 +1,31 @@
+name: Academy lab regression tests
+
+on:
+  push:
+    paths:
+      - 'labs/**'
+      - '.github/workflows/lab-checks.yml'
+  pull_request:
+    paths:
+      - 'labs/**'
+      - '.github/workflows/lab-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-labs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run offline lab tests
+        run: python -m unittest discover -s labs/tests -v
+      - name: Run HTTP scenario independently
+        run: python labs/lesson06/http_lab.py
