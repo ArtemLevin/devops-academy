@@ -1,0 +1,58 @@
+name: Academy synthetic integration labs
+
+on:
+  push:
+    paths:
+      - 'labs/stack/**'
+      - 'labs/kubernetes/**'
+      - 'labs/checks/**'
+      - 'labs/tests/**'
+      - '.github/workflows/integration-labs.yml'
+  pull_request:
+    paths:
+      - 'labs/stack/**'
+      - 'labs/kubernetes/**'
+      - 'labs/checks/**'
+      - 'labs/tests/**'
+      - '.github/workflows/integration-labs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline invariant tests (no Docker required)
+        run: python -m unittest discover -s labs/tests -v
+  compose-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_PROJECT_NAME: academy-ci-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose syntax
+        run: docker compose -f labs/stack/compose.yaml config --quiet
+      - name: Start synthetic dependencies and Celery worker
+        run: docker compose -f labs/stack/compose.yaml up -d --build db redis worker
+      - name: Assert PostgreSQL seed
+        run: |
+          result="$(docker compose -f labs/stack/compose.yaml exec -T db psql -U academy -d academy -tAc 'SELECT count(*) FROM demo_events;' | tr -d '[:space:]')"
+          test "$result" = '2'
+      - name: Assert background task execution
+        run: |
+          docker compose -f labs/stack/compose.yaml run --rm client | tee /tmp/academy-task-result.txt
+          grep -F 'PASS: task executed by worker and result returned' /tmp/academy-task-result.txt
+      - name: Collect container diagnostics on failure
+        if: failure()
+        run: docker compose -f labs/stack/compose.yaml ps && docker compose -f labs/stack/compose.yaml logs --tail=80
+      - name: Clean ephemeral CI resources only
+        if: always()
+        run: docker compose -f labs/stack/compose.yaml down --volumes --remove-orphans
