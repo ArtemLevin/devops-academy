@@ -42,10 +42,18 @@ jobs:
         run: docker compose -f labs/stack/compose.yaml config --quiet
       - name: Start synthetic dependencies and Celery worker
         run: docker compose -f labs/stack/compose.yaml up -d --build db redis worker
-      - name: Assert PostgreSQL seed
+      - name: Assert PostgreSQL seed after initialization
         run: |
-          result="$(docker compose -f labs/stack/compose.yaml exec -T db psql -U academy -d academy -tAc 'SELECT count(*) FROM demo_events;' | tr -d '[:space:]')"
-          test "$result" = '2'
+          for attempt in $(seq 1 20); do
+            result="$(docker compose -f labs/stack/compose.yaml exec -T db psql -U academy -d academy -tAc 'SELECT count(*) FROM demo_events;' 2>/dev/null | tr -d '[:space:]')" || true
+            if test "$result" = '2'; then
+              printf '%s\n' 'PASS: PostgreSQL demo_events count=2'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'FAIL: PostgreSQL seed did not become available' >&2
+          exit 1
       - name: Assert background task execution
         run: |
           docker compose -f labs/stack/compose.yaml run --rm client | tee /tmp/academy-task-result.txt
