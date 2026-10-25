@@ -1,0 +1,50 @@
+name: Academy visual browser tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/lesson.js'
+      - 'assets/lesson-visuals.js'
+      - 'assets/lesson.css'
+      - 'lessons/**'
+      - 'tests/visual_smoke.py'
+      - '.github/workflows/visual-smoke.yml'
+  pull_request:
+    paths:
+      - 'assets/lesson.js'
+      - 'assets/lesson-visuals.js'
+      - 'assets/lesson.css'
+      - 'lessons/**'
+      - 'tests/visual_smoke.py'
+      - '.github/workflows/visual-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-visual-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout lesson pages
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright and Chromium
+        run: |
+          python -m pip install 'playwright==1.57.0'
+          python -m playwright install --with-deps chromium
+      - name: Test 48 lessons at desktop, tablet and phone widths
+        run: python tests/visual_smoke.py
+      - name: Upload screenshots and test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: academy-visual-smoke
+          path: test-results/visuals/
+          retention-days: 14
+          if-no-files-found: warn
